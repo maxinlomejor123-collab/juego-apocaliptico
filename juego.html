@@ -1,212 +1,123 @@
 <!DOCTYPE html>
-<html lang="es">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>El Último Vagón</title>
+    <title>Juego Apocalíptico</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #222; font-family: sans-serif; }
-        canvas { display: block; margin: 0 auto; background: #333; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-size: 20px; }
-        #mensaje { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 30px; text-align: center; display: none; }
+        body { margin: 0; background: #111; overflow: hidden; font-family: sans-serif; }
+        canvas { display: block; margin: 0 auto; background: #222; border: 2px solid #444; }
+        #ui { position: absolute; top: 10px; left: 10px; color: #fff; font-size: 18px; text-shadow: 1px 1px 2px black; }
+        #msg { position: absolute; top: 40%; width: 100%; text-align: center; color: #fff; font-size: 24px; display: none; text-shadow: 2px 2px 4px black; }
     </style>
 </head>
 <body>
-    <div id="ui">Esperanza: <span id="esperanza">100</span>% | Distancia al Tren: <span id="distancia">0</span>m</div>
-    <div id="mensaje"></div>
-    <canvas id="gameCanvas"></canvas>
-
+    <div id="ui">Esperanza: <span id="hp">100</span>% | Meta: <span id="dist">100</span>%</div>
+    <div id="msg"></div>
+    <canvas id="c"></canvas>
 <script>
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    canvas.width = 800;
-    canvas.height = 400;
+    const c = document.getElementById('c');
+    const ctx = c.getContext('2d');
+    c.width = 800; c.height = 400;
 
-    // Estado del juego
-    let juegoActivo = true;
-    let fase = 'mundo'; // 'mundo', 'tren', 'final'
-    let esperanza = 100;
-    let distanciaTotal = 3000; // Metros hasta el tren
-    let distanciaRecorrida = 0;
+    let frame = 0;
+    let gameOver = false;
+    let win = false;
+    let hp = 100;
+    let dist = 0;
+    const maxDist = 2000;
     
-    // Jugador (Muñequito)
-    const jugador = { x: 50, y: 300, ancho: 20, alto: 40, color: '#ff4444', dy: 0, saltando: false };
-    const gravedad = 0.6;
-    const fuerzaSalto = -12;
-    const velocidad = 5;
-
+    // Jugador
+    const p = { x: 50, y: 300, w: 20, h: 40, dy: 0, jump: false, color: '#ff3333' };
+    const gravity = 0.6;
+    
     // Teclas
-    const teclas = { derecha: false, izquierda: false, arriba: false };
+    const keys = {};
+    document.addEventListener('keydown', e => keys[e.code] = true);
+    document.addEventListener('keyup', e => keys[e.code] = false);
 
-    // Obstáculos y Decoración
-    let obstaculos = [];
-    let particulas = [];
+    // Obstáculos
+    const obs = [];
+    for(let i=0; i<15; i++) obs.push({ x: 600 + i * 150, w: 30, h: 30 + Math.random()*20 });
 
-    // Generar obstáculos aleatorios
-    for(let i=0; i<20; i++) {
-        obstaculos.push({ x: 400 + Math.random() * 2500, y: 320, ancho: 30 + Math.random()*20, alto: 20 + Math.random()*20 });
-    }
+    function update() {
+        if(gameOver || win) return;
 
-    document.addEventListener('keydown', (e) => {
-        if(e.code === 'ArrowRight' || e.code === 'KeyD') teclas.derecha = true;
-        if(e.code === 'ArrowLeft' || e.code === 'KeyA') teclas.izquierda = true;
-        if((e.code === 'ArrowUp' || e.code === 'Space' || e.code === 'KeyW') && !jugador.saltando) {
-            jugador.dy = fuerzaSalto;
-            jugador.saltando = true;
+        // Movimiento
+        if(keys['ArrowRight'] || keys['KeyD']) { p.x += 4; dist += 4; }
+        if(keys['ArrowLeft'] || keys['KeyA'] && p.x > 0) p.x -= 4;
+        
+        // Salto
+        if((keys['ArrowUp'] || keys['Space'] || keys['KeyW']) && !p.jump) {
+            p.dy = -12; p.jump = true;
         }
-    });
+        p.dy += gravity;
+        p.y += p.dy;
+        if(p.y > 300) { p.y = 300; p.dy = 0; p.jump = false; }
 
-    document.addEventListener('keyup', (e) => {
-        if(e.code === 'ArrowRight' || e.code === 'KeyD') teclas.derecha = false;
-        if(e.code === 'ArrowLeft' || e.code === 'KeyA') teclas.izquierda = false;
-    });
-
-    function actualizar() {
-        if(!juegoActivo) return;
-
-        if(fase === 'mundo') {
-            // Movimiento
-            if(teclas.derecha) {
-                jugador.x += velocidad;
-                distanciaRecorrida += velocidad;
+        // Colisiones
+        obs.forEach(o => {
+            let screenX = o.x - dist + 100;
+            if(p.x < screenX + o.w && p.x + p.w > screenX && p.y < 340 - o.h + o.h && p.y + p.h > 340 - o.h) {
+                hp -= 1;
+                p.x -= 5;
             }
-            if(teclas.izquierda && jugador.x > 0) jugador.x -= velocidad;
+        });
 
-            // Salto y Gravedad
-            jugador.dy += gravedad;
-            jugador.y += jugador.dy;
-            if(jugador.y > 300) {
-                jugador.y = 300;
-                jugador.dy = 0;
-                jugador.saltando = false;
-            }
+        // Estado
+        if(dist % 10 === 0) hp -= 0.1;
+        if(hp <= 0) { gameOver = true; document.getElementById('msg').innerText = "FIN: Te rendiste."; document.getElementById('msg').style.display = 'block'; }
+        if(dist >= maxDist) { win = true; document.getElementById('msg').innerHTML = "¡LLEGASTE AL TREN!<br>El tren parte...<br><b>¡TE REENCUENTRAS CON ELLA!</b>"; document.getElementById('msg').style.display = 'block'; document.getElementById('msg').style.color = '#ff69b4'; }
 
-            // Colisión con obstáculos
-            obstaculos.forEach(obs => {
-                if(jugador.x < obs.x + obs.ancho && jugador.x + jugador.ancho > obs.x &&
-                   jugador.y < obs.y + obs.alto && jugador.y + jugador.alto > obs.y) {
-                    esperanza -= 0.5; // Daño al chocar
-                    jugador.x -= 5; // Empuje hacia atrás
-                }
-            });
-
-            // Lógica de esperanza
-            esperanza -= 0.05; // Desgaste natural
-            if(esperanza <= 0) {
-                gameOver("Te rendiste en la oscuridad...");
-            }
-
-            // Llegada al tren
-            if(distanciaRecorrida >= distanciaTotal) {
-                fase = 'tren';
-                iniciarSecuenciaTren();
-            }
-
-            // Actualizar UI
-            document.getElementById('esperanza').innerText = Math.floor(esperanza);
-            document.getElementById('distancia').innerText = Math.floor(distanciaTotal - distanciaRecorrida);
-        } 
-        else if (fase === 'tren') {
-            // Animación simple del tren moviéndose
-            if(trenX < 400) trenX += 2;
-            else {
-                fase = 'final';
-                iniciarFinal();
-            }
-        }
+        document.getElementById('hp').innerText = Math.floor(hp);
+        document.getElementById('dist').innerText = Math.floor(100 - (dist/maxDist)*100);
     }
 
-    let trenX = -200;
-    function iniciarSecuenciaTren() {
-        juegoActivo = false; // Pausa control
-        document.getElementById('mensaje').innerText = "¡Llegaste! Subiendo al tren...";
-        document.getElementById('mensaje').style.display = 'block';
-        setTimeout(() => {
-            document.getElementById('mensaje').style.display = 'none';
-            juegoActivo = true;
-        }, 2000);
-    }
-
-    function iniciarFinal() {
-        juegoActivo = false;
-        const msg = document.getElementById('mensaje');
-        msg.innerHTML = "El tren se detiene.<br>Bajas y la ves a lo lejos.<br><b>¡FIN!</b><br>(Recarga para jugar de nuevo)";
-        msg.style.display = 'block';
-        msg.style.color = '#ff69b4'; // Color rosa esperanza
-    }
-
-    function gameOver(texto) {
-        juegoActivo = false;
-        const msg = document.getElementById('mensaje');
-        msg.innerText = texto;
-        msg.style.display = 'block';
-        msg.style.color = 'red';
-    }
-
-    function dibujar() {
-        // Limpiar pantalla
-        ctx.fillStyle = fase === 'final' ? '#87CEEB' : '#222'; // Cielo azul si es final, oscuro si no
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
+    function draw() {
+        // Fondo
+        ctx.fillStyle = win ? '#87CEEB' : '#1a1a1a';
+        ctx.fillRect(0, 0, c.width, c.height);
+        
         // Suelo
-        ctx.fillStyle = fase === 'final' ? '#4caf50' : '#111';
-        ctx.fillRect(0, 340, canvas.width, 60);
+        ctx.fillStyle = win ? '#4caf50' : '#333';
+        ctx.fillRect(0, 340, c.width, 60);
 
-        if(fase === 'mundo') {
+        if(!win && !gameOver) {
             // Jugador
-            ctx.fillStyle = jugador.color;
-            ctx.fillRect(jugador.x, jugador.y, jugador.ancho, jugador.alto);
-            
-            // Ojos del muñeco
-            ctx.fillStyle = 'white';
-            ctx.fillRect(jugador.x + 12, jugador.y + 5, 5, 5);
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            // Ojo
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(p.x + 12, p.y + 8, 4, 4);
 
-            // Obstáculos (Escombros)
+            // Obstáculos
             ctx.fillStyle = '#555';
-            obstaculos.forEach(obs => {
-                // Solo dibujar si está en pantalla (cámara simple)
-                let pantallaX = obs.x - distanciaRecorrida + 100; 
-                if(pantallaX > -50 && pantallaX < 850) {
-                    ctx.fillRect(pantallaX, obs.y, obs.ancho, obs.alto);
-                }
+            obs.forEach(o => {
+                let sx = o.x - dist + 100;
+                if(sx > -50 && sx < 850) ctx.fillRect(sx, 340 - o.h, o.w, o.h);
             });
-
-            // Efecto de movimiento de fondo (parallax simple)
-            ctx.fillStyle = '#444';
-            ctx.fillRect(100 - (distanciaRecorrida % 800), 100, 200, 200); 
-        } 
-        else if (fase === 'tren') {
-            // Dibujar tren
-            ctx.fillStyle = '#777';
-            ctx.fillRect(trenX, 240, 600, 100);
-            ctx.fillStyle = '#333'; // Ruedas
-            ctx.beginPath(); ctx.arc(trenX + 100, 340, 40, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(trenX + 500, 340, 40, 0, Math.PI*2); ctx.fill();
-            
-            // Jugador dentro del tren (quieto)
-            ctx.fillStyle = jugador.color;
-            ctx.fillRect(400, 300, jugador.ancho, jugador.alto);
-        }
-        else if (fase === 'final') {
-            // Escena final
+        } else if (win) {
+            // Escena Final
+            ctx.fillStyle = '#ff3333'; // Jugador
+            ctx.fillRect(200, 300, 20, 40);
             ctx.fillStyle = '#ff69b4'; // Amada
             ctx.fillRect(600, 300, 20, 40);
-            ctx.fillStyle = jugador.color; // Jugador
-            ctx.fillRect(300, 300, 20, 40);
-            
-            // Corazón
             ctx.fillStyle = 'red';
-            ctx.font = "40px Arial";
-            ctx.fillText("❤", 450, 320);
+            ctx.font = '40px Arial';
+            ctx.fillText('❤', 380, 330);
+            
+            // Tren de fondo
+            ctx.fillStyle = '#777';
+            ctx.fillRect(50, 200, 700, 100);
         }
-
-        requestAnimationFrame(() => {
-            actualizar();
-            dibujar();
-        });
+        
+        requestAnimationFrame(loop);
     }
 
-    // Iniciar
-    dibujar();
+    function loop() {
+        update();
+        draw();
+    }
+    loop();
 </script>
 </body>
 </html>   
